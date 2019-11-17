@@ -601,6 +601,7 @@ unifyItemToPredType ui =
             SubstItem {..} -> reifySOP siSOP
             UnifyItem {..} -> reifySOP siRHS
 
+-- | Generates [W]anteds and CoercionHoles for given Ct and inequalities.
 evSubtPreds :: Ct -> [(PredType,Kind)] -> TcPluginM ([Ct], [CoercionHole])
 evSubtPreds ct preds = do
   let predTypes = map fst preds
@@ -638,6 +639,7 @@ evMagic ct knW preds = case classifyPredType $ ctEvPred $ ctEvidence ct of
       where
         natReflCo = mkNomReflCo k
 
+-- | @'mkNonCanonical'@ with given source location info.
 mkNonCanonical' :: CtLoc -> CtEvidence -> Ct
 mkNonCanonical' origCtl ev =
   let ct_ls   = ctLocSpan origCtl

@@ -129,6 +129,8 @@ normaliseNatEverywhere ty
       ty' <- everywhereM (mkM normaliseSimplifyNat) ty
       return $ if ty `eqType` ty' then Nothing else Just ty'
 
+-- | Applies 'normaliseNat' and 'simplifySOP' to type-level naturals;
+--   if the type is not of @Nat@ kind, it reutnrs as-is.
 normaliseSimplifyNat :: Type -> Writer [(Type, Type)] Type
 normaliseSimplifyNat ty
   | typeKind ty `eqType` typeNatKind = do
