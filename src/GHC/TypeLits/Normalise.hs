@@ -352,7 +352,23 @@ decideEqualSOP opts gen'd givens  _deriveds wanteds = do
 type NatEquality   = (Ct,CoreSOP,CoreSOP)
 type NatInEquality = (Ct,(CoreSOP,CoreSOP,Bool))
 
-reduceGivens :: Opts -> Set CType -> [Ct] -> [(Ct, (Type, EvTerm, [PredType]))]
+-- | Generate a list of reducible [G]ivens with evidence term
+--   and additional inequalities for such reductions.
+reduceGivens
+  :: Opts
+  -> Set CType
+      -- ^ A set of already reduced (predicate) types.
+      --   We need this informations to prevent GHC from looping.
+  -> [Ct]
+      -- ^ Flattened [G]ivens to be reduced.
+  -> [(Ct, (PredType, EvTerm, [PredType]))]
+      -- ^ A list of
+      --
+      -- * Reduced Ct, and
+      -- * A tuple of
+      --    * The reduced predicate type,
+      --    * an evidence Term, and
+      --    * additional inequality predicats.
 reduceGivens opts done givens =
   let nonEqs =
         [ ct
@@ -370,9 +386,17 @@ reduceGivens opts done givens =
       (\ct -> (ct,) <$> tryReduceGiven opts givens ct)
       nonEqs
 
+  -- | Try to reduce [G]iven Ct.
 tryReduceGiven
-  :: Opts -> [Ct] -> Ct
+  :: Opts
+  -> [Ct]
+     -- ^ Other available Cts
+  -> Ct
+     -- ^ Constraint to be reduced
   -> Maybe (PredType, EvTerm, [PredType])
+    -- ^ Reduced predicate, evidence term,
+    --   and the list ofunsolved inequalities.
+    --   Returns @'Nothing'@ if no reduction could be made.
 tryReduceGiven opts simplGivens ct = do
     let (mans, ws) =
           runWriter $ normaliseNatEverywhere $
@@ -380,6 +404,7 @@ tryReduceGiven opts simplGivens ct = do
         ws' = [ p
               | (p, _) <- subToPred opts ws
               , all (not . (`eqType` p). ctEvPred . ctEvidence) simplGivens
+                -- Just a brutal matching against givens
               ]
     pred' <- mans
     return (pred', toReducedDict (ctEvidence ct) pred', ws')
@@ -388,7 +413,15 @@ fromNatEquality :: Either NatEquality NatInEquality -> Ct
 fromNatEquality (Left  (ct, _, _)) = ct
 fromNatEquality (Right (ct, _))    = ct
 
-reduceNatConstr :: [Ct] -> Ct -> TcPluginM (Maybe (EvTerm, [(Type, Type)], Maybe CtEvidence))
+-- | Tries to reduce [W]anted by givens and .
+reduceNatConstr
+  :: [Ct] -- ^ [G]ivens
+  -> Ct   -- ^ Wanted to be reduced
+  -> TcPluginM (Maybe (EvTerm, [(Type, Type)], Maybe CtEvidence))
+      -- ^ An evidence term, additional inequality constraints,
+      --   and new evidence for reduced [W]anted if there is
+      --   no available reduced dictionary in [G]ivens.
+      --   Returns @'Nothing'@ if no reduction could be made.
 reduceNatConstr givens ct =  do
   let pred0 = ctEvPred $ ctEvidence ct
       (mans, tests) = runWriter $ normaliseNatEverywhere pred0
@@ -402,6 +435,9 @@ reduceNatConstr givens ct =  do
         Just c -> return (toReducedDict (ctEvidence c) pred0, Nothing)
     return (ev, tests, mwant)
 
+-- | @toReduceDict ev p@ creates an evidence term
+--   based on @ev@ representationally coerced into
+--   a dictionary for @p@.
 toReducedDict :: CtEvidence -> PredType -> EvTerm
 toReducedDict ct pred' =
   let pred0 = ctEvPred ct
